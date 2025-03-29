@@ -1,0 +1,6 @@
+# Ignore all files with the .pt extension
+*.pt
+# Ignore all files inside a runs directory
+runs/
+# Ignore all files inside a data directory
+data/
