@@ -10,10 +10,7 @@ FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = "/Users/jonathan/Documents/Homeworks_with_Python/Adv. Deep Learning/Ex1_VanillaCNN/data/galah4"
 
 # Hyperparameters
-learning_rate = 2e-4
 batch_size = 32
-num_epochs = 1 # 100
-patience = 10 # Training loop with early stopping, if the validation loss does not improve for 'patience' epochs
 train_fraction = 0.7 # Fraction of the data used for training
 val_fraction = 0.15 # Fraction of the data used for validation
 

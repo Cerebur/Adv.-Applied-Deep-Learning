@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, random_split
+from models import CNN_std 
 
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 
@@ -236,6 +237,9 @@ def train_model(model, train_loader, val_loader, loss_function, learning_rate, n
             - val_losses (list of float): List of average validation losses for each epoch.
     """
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    # set the learning rate to decrease on plateau
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+    last_lr = learning_rate
 
     train_losses = []
     val_losses = []
@@ -304,6 +308,16 @@ def train_model(model, train_loader, val_loader, loss_function, learning_rate, n
             patience_counter += 1
             if patience_counter >= patience:
                 print("Early stopping triggered.")
+                if model_name is not None:
+                    torch.save(best_model, FOLDER_PATH+f"/models/{model_name}_best.pth")
+                if(plot_fn is not None):
+                    assert(plot_kwargs is not None)
+                    assert("plot_folder" in plot_kwargs)
+                    plot_fn(model_name,
+                        train_losses,
+                        val_losses,
+                        plot_folder=plot_kwargs["plot_folder"],
+                        suffix="epoch_%.5d" % epoch)
                 break
             
         # Save the model with all epochs to plot the training and validation loss later
@@ -322,6 +336,12 @@ def train_model(model, train_loader, val_loader, loss_function, learning_rate, n
                         val_losses,
                         plot_folder=plot_kwargs["plot_folder"],
                         suffix="epoch_%.5d" % epoch)
+
+        # Decrease learning rate on plateau
+        scheduler.step(metrics=avg_val_loss)
+        if scheduler.get_last_lr()[0] != last_lr:
+            print("Learning rate changed to {scheduler.get_last_lr()[0]:.2e}")
+            last_lr = scheduler.get_last_lr()[0]
 
     return train_losses, val_losses, best_model
 
@@ -474,7 +494,6 @@ def initialize_model(model_choice, n_labels):
     torch.nn.Module
         The initialized model.
     """
-    from models import CNN_std  # Import models here to avoid circular imports
     model_dict = {'CNNstd': CNN_std(n_labels)}
     if model_choice in model_dict:
         return model_dict[model_choice]

@@ -9,7 +9,7 @@ DATA_PATH = "/Users/jonathan/Documents/Homeworks_with_Python/Adv. Deep Learning/
 learning_rate = 2e-4
 batch_size = 32
 num_epochs = 100 # 100
-patience = 10 # Training loop with early stopping, if the validation loss does not improve for 'patience' epochs
+patience = 40 # Training loop with early stopping, if the validation loss does not improve for 'patience' epochs
 train_fraction = 0.7 # Fraction of the data used for training
 val_fraction = 0.15 # Fraction of the data used for validation
 
