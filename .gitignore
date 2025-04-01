@@ -2,5 +2,11 @@
 *.pt
 # Ignore all files inside a runs directory
 runs/
+# Ignore all files inside a models directory
+models/
 # Ignore all files inside a data directory
 data/
+# Ignore all files inside a solutions directory
+solutions/
+# Ignore all files inside a filecache directory
+__pycache__/
