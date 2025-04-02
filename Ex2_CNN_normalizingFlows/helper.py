@@ -202,7 +202,7 @@ def loss_function(inputs, labels, model, loss_type='nll'):
         The computed negative log-likelihood error loss.
     """
 
-    if loss_type == 'nf_normalizing_flow':
+    if loss_type == 'normalizing_flow':
         # For normalizing flow models
         loss = nf_loss(inputs, labels, model)
         return loss
@@ -222,7 +222,7 @@ def loss_function(inputs, labels, model, loss_type='nll'):
 
 
 def train_model(model, train_loader, val_loader, loss_function, learning_rate, num_epochs, patience,
-                device, plot_fn=None, plot_interval=10, plot_kwargs=None, model_name=None, save_model_full=False):
+                device, plot_fn=None, plot_interval=10, plot_kwargs=None, save_model_full=False):
     """
     Trains a given model using the provided training and validation data loaders, loss function, and optimizer.
 
@@ -328,18 +328,18 @@ def train_model(model, train_loader, val_loader, loss_function, learning_rate, n
             # Save the best model to the "models" directory
             if not os.path.exists(FOLDER_PATH+'/models'):
                 os.makedirs(FOLDER_PATH+'/models')
-            if model_name is not None:
-                torch.save(best_model, FOLDER_PATH+f"/models/{model_name}_best.pth")
+            if model.model_name is not None:
+                torch.save(best_model, FOLDER_PATH+f"/models/{model.model_name}_best.pth")
         else:
             patience_counter += 1
             if patience_counter >= patience:
                 print("Early stopping triggered.")
-                if model_name is not None:
-                    torch.save(best_model, FOLDER_PATH+f"/models/{model_name}_best.pth")
+                if model.model_name is not None:
+                    torch.save(best_model, FOLDER_PATH+f"/models/{model.model_name}_best.pth")
                 if(plot_fn is not None):
                     assert(plot_kwargs is not None)
                     assert("plot_folder" in plot_kwargs)
-                    plot_fn(model_name,
+                    plot_fn(model.model_name,
                         train_losses,
                         val_losses,
                         plot_folder=plot_kwargs["plot_folder"],
@@ -347,17 +347,17 @@ def train_model(model, train_loader, val_loader, loss_function, learning_rate, n
                 break
             
         # Save the model with all epochs to plot the training and validation loss later
-        if model_name is not None and save_model_full:
+        if model.model_name is not None and save_model_full:
             if not os.path.exists(FOLDER_PATH+'/models'):
                 os.makedirs(FOLDER_PATH+'/models')
-            torch.save(model.state_dict(), FOLDER_PATH+f"/models/{model_name}_epoch_{epoch}.pth")
+            torch.save(model.state_dict(), FOLDER_PATH+f"/models/{model.model_name}_epoch_{epoch}.pth")
 
         if(epoch%plot_interval==0) or (epoch==num_epochs-1):
             if(plot_fn is not None):
                 assert(plot_kwargs is not None)
                 assert("plot_folder" in plot_kwargs)
 
-                plot_fn(model_name,
+                plot_fn(model.model_name,
                         train_losses,
                         val_losses,
                         plot_folder=plot_kwargs["plot_folder"],

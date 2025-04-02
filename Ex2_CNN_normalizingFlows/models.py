@@ -131,8 +131,8 @@ class CNN_normalizingFlow(nn.Module):
             self.fp64_on_cpu = False
             
 		# add a name to the model so that the rest of the code knows which model and loss functions to use
-        self.model_name = "CNNflow"
-        self.loss_name = "nf_normalizing_flow"
+        self.loss_name = "normalizing_flow"
+        self.model_name = "CNNflow_" + nf_type
 
     def log_pdf_evaluation(self, target_labels, input_data):
         """
@@ -278,29 +278,37 @@ class CNN_normalizingFlow(nn.Module):
         std = samples.std(dim=0).cpu().numpy()
         samples = samples.cpu().numpy()
 
-        fig, axdict = plt.subplots(3, 1)
+        fig, axdict = plt.subplots(3, 1, figsize=(12, 8))  # Adjust figure size if needed
         for dim_ind in range(3):
             # plot the histogram of the samples
-            axdict[dim_ind].hist(samples[:, dim_ind], color="k", density=True,
-                                 bins=50, alpha=0.5, label="density based on samples")
-
+            axdict[dim_ind].hist(samples[:, dim_ind], color="xkcd:grey", density=True,
+                                bins=50, alpha=0.5, label="density based on samples")
+        
             # plot the Gaussian approximation
             min_sample = samples[:, dim_ind].min()
             max_sample = samples[:, dim_ind].max()
             xvals = np.linspace(min_sample, max_sample, 1000)
             yvals = norm.pdf(xvals, loc=mean[dim_ind], scale=std[dim_ind])
-            axdict[dim_ind].plot(xvals, yvals, color="green",
-                                 label="Gaussian approximation")
-
+            axdict[dim_ind].plot(xvals, yvals, color="xkcd:red",
+                                label="Gaussian approximation")
+        
             # plot the true value if it is given
             if (truth is not None):
-                true_value = truth[dim_ind].cpu().item()
+                true_value = truth[batch_index, dim_ind].cpu().item()
                 axdict[dim_ind].axvline(
-                    true_value, color="red", label="true value")
-
-            # plot the legend only for the first panel
-            if (dim_ind == 0):
-                axdict[dim_ind].legend()
-
+                    true_value, color="black", label="true value")
+        
+            # set the x-axis label
+            axdict[dim_ind].set_xlabel(["T_eff", "log_g", "Fe_H"][dim_ind])
+            # set the y-axis label
+            axdict[dim_ind].set_ylabel("PDF")
+        
+        # Create a single legend for all subplots
+        handles, labels = axdict[0].get_legend_handles_labels()
+        fig.legend(handles, labels, loc="center left", bbox_to_anchor=(0.66, 0.5), frameon=True)
+        
+        # Adjust layout to make space for the legend
+        fig.tight_layout(rect=[0, 0, 0.68, 1])  # Leave space on the right for the legend
+        
         plt.savefig(filename)
         plt.close(fig)

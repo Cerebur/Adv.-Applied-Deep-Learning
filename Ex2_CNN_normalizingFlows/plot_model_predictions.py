@@ -7,6 +7,33 @@ from torchinfo import summary
 from helper import denormalize, denormalize_std, evaluate_model, loss_function, prepare_data, initialize_model, get_device
 
 
+# some styling for nice plots
+fig_width_pt=347.5*1.6
+inches_per_pt = 1.0/72.27               # Convert pt to inches
+golden_mean = (np.sqrt(5)-1.0)/(2.0)    # Aesthetic ratio
+fig_width = fig_width_pt*inches_per_pt  # width in inlw=2ches
+fig_height = fig_width*golden_mean      # height in inches
+fig_size = [fig_width,fig_height]
+preamble = r"\usepackage{amsmath}" + "\n" + r"\usepackage{amssymb}" + "\n" + r"\usepackage{siunitx}"
+plt.rcParams['text.latex.preamble']=preamble
+params = {  'text.usetex': True,
+            'font.weight': 'bold',
+            'axes.linewidth' : 1.5,
+            'axes.labelsize': 21,
+            'font.size': 20,
+            'legend.fontsize': 20,
+            'xtick.labelsize': 20,
+            'ytick.direction':'in',
+            'xtick.direction':'in',
+            'ytick.labelsize': 20,
+            'font.family' : 'lmodern',
+            'figure.figsize': fig_size}
+plt.rcParams.update(params)
+
+
+
+
+
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = "/Users/jonathan/Documents/Homeworks_with_Python/Adv. Deep Learning/Ex1_VanillaCNN/data/galah4"
 
@@ -38,8 +65,8 @@ model = initialize_model(model_choice, n_labels, nf_type=args.normalizing_flow_t
 summary(model, input_size=(1, 1, spectra_length))
 
 # Load the best model saved in models directory
-if os.path.exists(FOLDER_PATH+f'/models/{model_choice}_best.pth'):
-    best_model = torch.load(FOLDER_PATH+f'/models/{model_choice}_best.pth')
+if os.path.exists(FOLDER_PATH+f'/models/{model.model_name}_best.pth'):
+    best_model = torch.load(FOLDER_PATH+f'/models/{model.model_name}_best.pth')
     print("Best model loaded from file.")
 else:
     raise FileNotFoundError(f"Best model file not found in {FOLDER_PATH}/models/")
@@ -82,7 +109,7 @@ for j in range(n_labels):
     ax.legend()
 
 plt.tight_layout()
-plt.savefig(FOLDER_PATH+f'/plots/{model_choice}_scatter_and_error.png')
+plt.savefig(FOLDER_PATH+f'/plots/{model.model_name}_scatter_and_error.png')
 plt.close()
 
 
@@ -106,7 +133,7 @@ for j in range(n_labels):
     ax.legend()
 
 plt.tight_layout()
-plt.savefig(FOLDER_PATH+f'/plots/{model_choice}_pull_distribution.png')
+plt.savefig(FOLDER_PATH+f'/plots/{model.model_name}_pull_distribution.png')
 plt.close()
 
 # Plot the uncertainty distribution
@@ -117,5 +144,12 @@ for j in range(n_labels):
     ax.set_xlabel("uncertainty " + labelNames[j])
     ax.set_ylabel("Density")
 plt.tight_layout()
-plt.savefig(FOLDER_PATH+f'/plots/{model_choice}_uncertainty_distribution.png')
+plt.savefig(FOLDER_PATH+f'/plots/{model.model_name}_uncertainty_distribution.png')
 plt.close()
+
+# Plot the model predictions
+for batch_spectra, batch_labels in test_loader:
+    batch_spectra = batch_spectra.to(device).unsqueeze(1)  # Add channel dimension
+    batch_labels = batch_labels.to(device)
+    break
+model.visualize_pdf(batch_spectra, FOLDER_PATH+f'/plots/{model.model_name}_pdf.png', samplesize=1000, batch_index=0, truth=batch_labels)

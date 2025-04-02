@@ -44,7 +44,7 @@ model.to(device)
 # Train the model
 train_losses, val_losses, best_model = train_model(
     model, train_loader, val_loader, loss_function, learning_rate, num_epochs, patience,
-    device, model_name=model_choice, plot_fn=plot_fn, plot_kwargs={"plot_folder": FOLDER_PATH+'/plots'},
+    device, plot_fn=plot_fn, plot_kwargs={"plot_folder": FOLDER_PATH+'/plots'},
     plot_interval=10
 )
 
