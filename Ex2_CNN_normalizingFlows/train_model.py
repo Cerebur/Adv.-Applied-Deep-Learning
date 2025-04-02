@@ -2,6 +2,7 @@ import os
 from torchinfo import summary
 from helper import train_model, plot_fn, loss_function, prepare_data, initialize_model, get_device
 import argparse
+import torch
 
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = "/Users/jonathan/Documents/Homeworks_with_Python/Adv. Deep Learning/Ex1_VanillaCNN/data/galah4"
@@ -22,14 +23,13 @@ print('###########################')
 print('### Training the model ###')
 print('###########################')
 parser = argparse.ArgumentParser()
-parser.add_argument("-normalizing_flow_type", default="diagonal_gaussian",
+parser.add_argument("-nf_type", default="diagonal_gaussian",
                     choices=["diagonal_gaussian", "full_gaussian", "full_flow"])
 args = parser.parse_args()
-print("Using normalizing flow type ", args.normalizing_flow_type)
-
+print("Using normalizing flow type ", args.nf_type)
 # Initialize model
 model_choice = 'CNNflow'
-model = initialize_model(model_choice, n_labels, nf_type=args.normalizing_flow_type)
+model = initialize_model(model_choice, n_labels, nf_type=args.nf_type)
 
 # Print the model summary before moving it to the device
 summary(model, input_size=(1, 1, spectra_length))

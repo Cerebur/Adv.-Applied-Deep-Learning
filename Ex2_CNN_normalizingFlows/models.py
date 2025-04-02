@@ -124,7 +124,7 @@ class CNN_normalizingFlow(nn.Module):
         
         # Detect and use Apple Silicon GPU (MPS) if available
         device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
-        if self.nf_type == "full_flow" and device.type == "mps":
+        if (self.nf_type == "full_flow" or self.nf_type=='full_gaussian') and device.type == "mps":
             # MPS does not support double precision, therefore we need to run the flow on the CPU
             self.fp64_on_cpu = True
         else:
@@ -154,7 +154,7 @@ class CNN_normalizingFlow(nn.Module):
         """
         latent_intermediate = self.encoder(input_data)  # get the flow parameters from the CNN encoder
 
-        if (self.nf_type == "full_flow"):
+        if (self.nf_type == "full_flow" or self.nf_type == 'full_gaussian'):
             # convert to double. Double precision is needed for the Gaussianization flow. This is for numerical stability.
             if self.fp64_on_cpu:  # MPS does not support double precision, therefore we need to run the flow on the CPU
                 latent_intermediate = latent_intermediate.cpu().to(torch.float64)
@@ -186,7 +186,7 @@ class CNN_normalizingFlow(nn.Module):
         """
         # for full flow we need to convert to double precision for the normalizing flow
         # for numerical stability
-        if (self.nf_type == "full_flow"):
+        if (self.nf_type == "full_flow" or self.nf_type == 'full_gaussian'):
             # convert to double
             if self.fp64_on_cpu: # MPS does not support double precision, therefore we need to run the flow on the CPU
                 flow_params = flow_params.cpu().to(torch.float64)

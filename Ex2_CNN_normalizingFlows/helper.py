@@ -305,7 +305,7 @@ def train_model(model, train_loader, val_loader, loss_function, learning_rate, n
             for batch_spectra, batch_labels in val_loader:
                 batch_spectra, batch_labels = batch_spectra.to(device).unsqueeze(1), batch_labels.to(device)
 
-                val_loss=loss_function(batch_spectra, batch_labels, model)
+                val_loss=loss_function(batch_spectra, batch_labels, model, loss_type=model.loss_name)
 
                 total_val_loss += val_loss.item()
 
@@ -407,7 +407,7 @@ def evaluate_model(model, test_loader, loss_function, device):
             batch_spectra, batch_labels = batch_spectra.to(device).unsqueeze(1), batch_labels.to(device)
             predictions = model(batch_spectra)
 
-            test_loss = loss_function(batch_spectra, batch_labels,model)
+            test_loss = loss_function(batch_spectra, batch_labels,model, loss_type=model.loss_name)
 
             total_test_loss += test_loss.item()
             all_predictions.append(predictions.cpu())

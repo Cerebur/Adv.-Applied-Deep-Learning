@@ -48,18 +48,18 @@ _, _, test_loader, spectra_length, n_labels, labelNames, ranges = prepare_data(
 )
 
 print('###########################')
-print('### Training the model ###')
+print('### Plotting the model ###')
 print('###########################')
 parser = argparse.ArgumentParser()
-parser.add_argument("-normalizing_flow_type", default="diagonal_gaussian",
+parser.add_argument("-nf_type", default="diagonal_gaussian",
                     choices=["diagonal_gaussian", "full_gaussian", "full_flow"])
 args = parser.parse_args()
-print("Using normalizing flow type ", args.normalizing_flow_type)
+print("Using normalizing flow type ", args.nf_type)
 
 
 # Initialize model
 model_choice = 'CNNflow'
-model = initialize_model(model_choice, n_labels, nf_type=args.normalizing_flow_type)
+model = initialize_model(model_choice, n_labels, nf_type=args.nf_type)
 
 # Print the model summary
 summary(model, input_size=(1, 1, spectra_length))
