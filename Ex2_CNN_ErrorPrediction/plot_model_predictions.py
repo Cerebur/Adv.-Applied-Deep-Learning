@@ -5,6 +5,29 @@ import torch
 from torchinfo import summary
 from helper import denormalize, denormalize_std, evaluate_model, loss_function, prepare_data, initialize_model, get_device
 
+# some styling for nice plots
+fig_width_pt=347.5*1.6
+inches_per_pt = 1.0/72.27               # Convert pt to inches
+golden_mean = (np.sqrt(5)-1.0)/(2.0)    # Aesthetic ratio
+fig_width = fig_width_pt*inches_per_pt  # width in inlw=2ches
+fig_height = fig_width*golden_mean      # height in inches
+fig_size = [fig_width,fig_height]
+preamble = r"\usepackage{amsmath}" + "\n" + r"\usepackage{amssymb}" + "\n" + r"\usepackage{siunitx}"
+plt.rcParams['text.latex.preamble']=preamble
+params = {  'text.usetex': True,
+            'font.weight': 'bold',
+            'axes.linewidth' : 1.5,
+            'axes.labelsize': 21,
+            'font.size': 20,
+            'legend.fontsize': 20,
+            'xtick.labelsize': 20,
+            'ytick.direction':'in',
+            'xtick.direction':'in',
+            'ytick.labelsize': 20,
+            'font.family' : 'lmodern',
+            'figure.figsize': fig_size}
+plt.rcParams.update(params)
+
 
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = "/Users/jonathan/Documents/Homeworks_with_Python/Adv. Deep Learning/Ex1_VanillaCNN/data/galah4"
