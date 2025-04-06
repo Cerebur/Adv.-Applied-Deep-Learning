@@ -73,7 +73,7 @@ def denormalize_std(uncertainty, ranges):
     return uncertainty * (ranges[1] - ranges[0])
 
 
-def get_normalized_data(data_path, return_SNR=False):
+def get_normalized_data(data_path):
     """
     Load and normalize spectra and label data from the given path.
     Parameters
@@ -116,9 +116,7 @@ def get_normalized_data(data_path, return_SNR=False):
 
     # Normalize spectra
     spectra = np.log(np.maximum(spectra, 0.2))
-
-    if return_SNR:
-        return spectra, labels, spectra_length, n_labels, labelNames, ranges, SNR
+    
     return spectra, labels, spectra_length, n_labels, labelNames, ranges
 
 def mse_loss(predictions, labels):
