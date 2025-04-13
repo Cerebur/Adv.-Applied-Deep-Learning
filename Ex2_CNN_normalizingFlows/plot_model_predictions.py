@@ -78,7 +78,7 @@ device = get_device()
 model.to(device)
 
 all_predictions, all_true_labels, _, _ = evaluate_model(model, test_loader, loss_function, device)
-all_uncertainties = np.exp(all_predictions[:, n_labels:])  # Assuming the last n_labels are uncertainties
+all_uncertainties = all_predictions[:, n_labels:]  # Assuming the last n_labels are uncertainties
 all_predictions = denormalize(all_predictions[:,:n_labels], ranges)
 all_uncertainties = denormalize_std(all_uncertainties, ranges)
 all_true_labels = denormalize(all_true_labels, ranges)
@@ -89,8 +89,23 @@ for j in range(n_labels):
     # Scatter plot
     ax = axes[0, j]
     gt = all_true_labels
-    # Scatter plot of true vs predicted values with error bars
-    ax.errorbar(gt[:, j], all_predictions[:, j], yerr=all_uncertainties[:, j], fmt='o', alpha=0.2, capsize=3)
+
+    # sort the data by the ground truth labels
+    sorted_indices = np.argsort(gt[:, j])
+    sorted_gt = gt[sorted_indices, j]
+    sorted_predictions = all_predictions[sorted_indices, j]
+    sorted_uncertainties = all_uncertainties[sorted_indices, j]
+
+    # Scatter plot of true vs predicted values with shaded uncertainty
+    ax.scatter(gt[:, j], all_predictions[:, j], alpha=0.2)
+    ax.fill_between(
+        sorted_gt,
+        sorted_predictions - sorted_uncertainties,
+        sorted_predictions + sorted_uncertainties,
+        color="grey",
+        alpha=0.3,
+        label="Predicted Std"
+    )
     ax.plot([gt[:, j].min().item(), gt[:, j].max().item()], [gt[:, j].min().item(), gt[:, j].max().item()],
             c="black", linestyle="dashed", label="Perfect prediction")
     ax.set_xlabel("true " + labelNames[j])
@@ -100,9 +115,17 @@ for j in range(n_labels):
     # Error plot
     ax = axes[1, j]
     errors = all_predictions[:, j] - gt[:, j]
-    # Scatter plot of errors with respect to true values with error bars
-    ax.errorbar(gt[:, j], errors, yerr=all_uncertainties[:, j], fmt='o', alpha=0.2, capsize=3, c="xkcd:red")
-    #ax.scatter(gt[:, j], errors, s=6, alpha=0.2, c="red")
+    sorted_errors = errors[sorted_indices]
+    # Scatter plot of errors with respect to true values with shaded uncertainty
+    ax.scatter(gt[:, j], errors, alpha=0.2, c="xkcd:red")
+    ax.fill_between(
+        sorted_gt,
+        sorted_errors - sorted_uncertainties,
+        sorted_errors + sorted_uncertainties,
+        color="grey",
+        alpha=0.3,
+        label="Predicted Std"
+    )
     ax.axhline(0, color="black", linestyle="dashed", label="Zero error")
     ax.set_xlabel("true " + labelNames[j])
     ax.set_ylabel("error (predicted - true)")

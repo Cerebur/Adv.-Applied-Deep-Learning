@@ -104,7 +104,6 @@ def get_normalized_data(data_path):
     # labels: mass, age, l_bol, dist, t_eff, log_g, fe_h
     labelNames = ["mass", "age", "l_bol", "dist", "t_eff", "log_g", "fe_h"]
     labels = np.load(f"{data_path}/labels.npy")
-    SNR = labels[:, -1]
     labels = labels[:, :-1]
 
     # We only use the labels: t_eff, log_g, fe_h
