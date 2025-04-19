@@ -10,3 +10,5 @@ data/
 solutions/
 # Ignore all files inside a filecache directory
 __pycache__/
+# Ignore the python dir .pytorch2_5
+.pytorch2_5

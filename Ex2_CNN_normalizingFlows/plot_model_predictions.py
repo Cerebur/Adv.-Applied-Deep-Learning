@@ -176,3 +176,7 @@ for batch_spectra, batch_labels in test_loader:
     batch_labels = batch_labels.to(device)
     break
 model.visualize_pdf(batch_spectra, FOLDER_PATH+f'/plots/{model.model_name}_pdf.png', samplesize=1000, batch_index=0, truth=batch_labels)
+
+
+# Plot the coverage, i.e create a plot showing the fraction of points that are within the uncertainty bounds
+# Consider using the python package corner.py
