@@ -17,7 +17,7 @@ k = 5 # Number of nearest neighbors to consider
 output_dims = [12, 24, 12] # Output dimensions of the model
 
 # Load the data
-train_dataset, val_dataset, test_dataset, n_labels, label_params, data_params = get_normalized_data(DATA_PATH)
+train_dataset, val_dataset, test_dataset, n_labels, _, _ = get_normalized_data(DATA_PATH)
 
 # Load the data into DataLoader
 train_loader = DataLoader(
