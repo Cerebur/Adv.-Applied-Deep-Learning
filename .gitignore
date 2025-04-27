@@ -12,3 +12,5 @@ solutions/
 __pycache__/
 # Ignore the python dir .pytorch2_5
 .pytorch2_5
+# Ignore all image files 
+img/

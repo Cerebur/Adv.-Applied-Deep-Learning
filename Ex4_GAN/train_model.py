@@ -58,3 +58,6 @@ train_model(discriminator=discriminator,generator=generator,
             criterion=criterion,
             logStep=logStep,
             batch_size=batchSize)
+
+# to load tensorboard, run the following command in the terminal
+# tensorboard --logdir=runs/
