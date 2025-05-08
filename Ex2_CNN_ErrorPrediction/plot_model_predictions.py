@@ -27,7 +27,7 @@ params = {  'text.usetex': True,
             'font.family' : 'lmodern',
             'figure.figsize': fig_size}
 plt.rcParams.update(params)
-
+ 
 
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 DATA_PATH = "/Users/jonathan/Documents/Homeworks_with_Python/Adv. Deep Learning/Ex1_VanillaCNN/data/galah4"
