@@ -4,148 +4,135 @@ import numpy as np
 import torch
 import seaborn as sns  # a useful plotting library on top of matplotlib
 from tqdm.auto import tqdm # a nice progress bar
-from models import NoisePredictor # the neural network that predicts the noise added to the data
 import os
 from torch.utils.data import DataLoader, TensorDataset
-
-
+# For image transforms
+from torchvision import transforms
+# For DATA SET
+import torchvision.datasets as datasets
+from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 
 
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
 
+# Download the data from huggingface (https://huggingface.co/datasets/simbaswe/galah4/tree/main)
+# Then, specify this directory here
+FILE_PATH = FOLDER_PATH#'/content/drive/MyDrive/Colab Notebooks/Adv. Deep Learning'
+PLOT_PATH = FILE_PATH+'/plots/'
+MODEL_PATH = FILE_PATH+'/models/'
 
-# generate a dataset of 1D data from a mixture of two Gaussians
-# this is a simple example, but you can use any distribution
-data_distribution = torch.distributions.mixture_same_family.MixtureSameFamily(
-    torch.distributions.Categorical(torch.tensor([1, 2])),
-    torch.distributions.Normal(torch.tensor([-4., 4.]), torch.tensor([1., 1.]))
+
+# Select the gpu device if available
+if torch.cuda.is_available():
+    device = torch.device("cuda")       #CUDA GPU
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")        #Apple GPU
+else:
+    device = torch.device("cpu")        #if nothing is found use the CPU
+print(f"Using device: {device}")
+
+
+# Hyperparameters
+LEARNING_RATE = 4e-4
+BATCH_SIZE = 128  # Batch size
+N_EPOCHS = 100
+IMAGE_SIZE = 28
+TIME_STEPS = 1000
+SAMPLING_TIMESTEPS = 250
+BETA = 0.02
+
+# we define a tranform that converts the image to tensor
+myTransforms = transforms.Compose([transforms.ToTensor()])
+
+
+# the MNIST dataset is available through torchvision.datasets
+print("loading MNIST digits dataset")
+dataset = datasets.MNIST(root="dataset/", transform=myTransforms, download=True)
+for i in dataset:
+    # check if the data is normalized between 0 and 1
+    assert i[0].min() >= 0 and i[0].max() <= 1, "Data is not normalized between 0 and 1"
+# let's create a dataloader to load the data in batches
+train_loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+
+test_dataset = datasets.MNIST(root='dataset/', train=False, download=False, transform=myTransforms)
+test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+
+
+model_name = 'model1'  # Name of the model
+DIM = 32
+DIM_MULTS = (1, 2, 5)
+model = Unet(
+    dim = DIM,
+    dim_mults = DIM_MULTS,
+    flash_attn = False,
+    channels = 1
 )
 
-dataset = data_distribution.sample(torch.Size([10000]))  # create training data set
-dataset_validation = data_distribution.sample(torch.Size([1000])) # create validation data set
+diffusion = GaussianDiffusion(
+    model,
+    image_size = IMAGE_SIZE,
+    timesteps = TIME_STEPS,           # number of steps
+    sampling_timesteps = SAMPLING_TIMESTEPS    # number of sampling timesteps (using ddim for faster inference [see ddim paper])
+).to(device)  # move the model to the device
 
 
-# we will keep these parameters fixed throughout
-# these parameters should give you an acceptable result
-# but feel free to play with them
-TIME_STEPS = 250
-BETA = 0.02
-N_EPOCHS = 1000
-BATCH_SIZE = 64
-LEARNING_RATE = 0.8e-4
-device= "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
-print("Using device:", device)
 
-model_name = 'variable_beta'  # Name of the model
-g = NoisePredictor(input_dim=2,output_dim=1, name=model_name, hidden_dim=64, num_layers=5).to(device) # the neural network that predicts the noise added to the data
-
-
-optimizer = torch.optim.Adam(g.parameters(), lr=LEARNING_RATE) # the optimizer
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=5)
-
-# Create a DataLoader for efficient batching and shuffling
-train_loader = DataLoader(TensorDataset(dataset), batch_size=BATCH_SIZE, shuffle=True)
-# Create a DataLoader for validation
-validation_loader = DataLoader(TensorDataset(dataset_validation), batch_size=BATCH_SIZE, shuffle=True)
-
-# Define a beta schedule
-beta_schedule = torch.linspace(0.001, BETA, TIME_STEPS).to(device)  # Linearly increasing beta values
-if model_name == 'fixed_beta':
-    beta_schedule = beta_schedule*0+BETA
-alpha = 1 - beta_schedule
-alpha_bar = torch.cumprod(alpha, dim=0)  # Cumulative product of (1 - beta_t)
+optim = torch.optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
 
 model_save_counter = 0  # Counter to save the model 100 epochs after last save
 best_loss = float('inf')  # Initialize best loss to infinity
-all_val_losses = []  # List to store all losses for plotting
 all_train_losses = []  # List to store all training losses for plotting
-epochs = tqdm(range(N_EPOCHS))  # this makes a nice progress bar
+epochs = range(N_EPOCHS)  # this makes a nice progress bar
+plot_intvl=1
+plot_out_intvl = 5
 for e in epochs:  # loop over epochs
-    g.train()
+    model.train()
     train_loss=0
-    for batch in train_loader:  # Use DataLoader for batching
-        x0 = batch[0].to(device)
-        # sample a random time step t
-        t = torch.randint(1, TIME_STEPS+1, (x0.shape[0],)).to(device)
-        # sample a random noise
-        noise = torch.randn_like(x0).to(x0.device)
-        # compute sqrt_alpha_bar_t and sqrt(1 - alpha_bar_t) for each t
-        sqrt_alpha_bar_t = torch.sqrt(alpha_bar[t-1]).to(device)
-        sqrt_one_minus_alpha_bar_t = torch.sqrt(1 - alpha_bar[t-1]).to(device)
-        # add noise to the data
-        x_t = sqrt_alpha_bar_t * x0 + sqrt_one_minus_alpha_bar_t * noise
-        # compute the predicted noise
-        predicted_noise = g(x_t, t)
-        # compute the loss
-        loss = torch.nn.MSELoss()(predicted_noise, noise.view(-1, 1))  # Ensure noise is reshaped correctly
+    batches = tqdm(train_loader, leave=False)  # this makes a nice progress bar for the batches
+    for i,batch in enumerate(batches):  # Use DataLoader for batching
+        batch = batch[0]
+        loss = diffusion(batch.to(device))  # compute the loss
+        loss.backward()  # backpropagation
+        optim.step()  # update the weights
+        optim.zero_grad()  # Clear the gradients
+        train_loss += loss.item()  # accumulate the loss
 
-        # backpropagation
-        g.zero_grad()  # Clear the gradients
-        loss.backward()
-        # update the weights
-        optimizer.step()
-        train_loss += loss.item()
+        # Update the progress bar only once per epoch
+        batches.set_postfix(loss=train_loss/i)
+
     # compute the average loss
     avg_train_loss = train_loss / len(train_loader)
-    if not e==0:
-        all_train_losses.append(avg_train_loss)  # Append the average loss to the list
+    all_train_losses.append(avg_train_loss)  # Append the average loss to the list
 
-    # validate the model
-    g.eval()
-    total_loss = 0
-    with torch.no_grad():
-        for batch in validation_loader:  # Use DataLoader for batching
-            x0 = batch[0].to(device)
-            # sample a random time step t
-            t = torch.randint(1, TIME_STEPS, (x0.shape[0],)).to(device)
-            # sample a random noise
-            noise = torch.randn_like(x0).to(x0.device)
-            # compute sqrt_alpha_bar_t and sqrt(1 - alpha_bar_t) for each t
-            sqrt_alpha_bar_t = torch.sqrt(alpha_bar[t]).to(device)
-            sqrt_one_minus_alpha_bar_t = torch.sqrt(1 - alpha_bar[t]).to(device)
-
-            # add noise to the data
-            x_t = sqrt_alpha_bar_t * x0 + sqrt_one_minus_alpha_bar_t * noise
-
-            # compute the predicted noise
-            predicted_noise = g(x_t, t)
-            # compute the loss
-            loss = torch.nn.MSELoss()(predicted_noise, noise.view(-1, 1))  # Reshape noise to match predicted_noise
-
-            total_loss += loss.item()
-    # compute the average loss
-    avg_loss = total_loss / len(validation_loader)
-    if not e==0:
-        all_val_losses.append(avg_loss)  # Append the average loss to the list
-    if avg_loss < best_loss and model_save_counter >= 100:
-        best_loss = avg_loss
+    if avg_train_loss < best_loss and model_save_counter >= 0:
+        best_loss = avg_train_loss
         # save the model
-        print(f"Saving model at epoch {e} with loss: {avg_loss:.4f}")
-        if not os.path.exists(os.path.join(FOLDER_PATH, "models")):
-            os.makedirs(os.path.join(FOLDER_PATH, "models"))
-        torch.save(g.state_dict(), os.path.join(FOLDER_PATH, "models", f"{g.name}_best.pth"))
-        print(f"Model saved with loss: {avg_loss:.4f}")
+        print(f"Saving model at epoch {e} with loss: {avg_train_loss:.4f}")
+        torch.save(model.state_dict(), os.path.join(MODEL_PATH, f"{model_name}_best.pth"))
+        print(f"Model saved with loss: {avg_train_loss:.4f}")
         model_save_counter = 0
     else:
         model_save_counter += 1
 
 
-    # update the learning rate
-    scheduler.step(avg_loss)
+    # plot the current network output every plot_out_intvl
+    if (e % plot_out_intvl == 0) or e==len(train_loader)-1:
+        model.eval()
+        with torch.no_grad():
+            samples = diffusion.sample(batch_size=32)
+            fig, axes = plt.subplots(4, 8, figsize=(16, 8))
+            for i, ax in enumerate(axes.flat):
+                ax.imshow(samples[i].cpu().numpy().squeeze(), cmap='gray')
+                ax.axis('off')
+            # save images
+            plt.savefig(os.path.join(PLOT_PATH, f"{model_name}_epoch_{e}.png"))
+            plt.close()
 
 
-    # Update the progress bar only once per epoch
-    epochs.set_postfix(loss=avg_loss)
-
-    # plot the validation loss and training loss every 10 epochs
-    if (e % 10 == 0 and e!=0) or e==N_EPOCHS-1:
-        if not os.path.exists(os.path.join(FOLDER_PATH, "plots")):
-            os.makedirs(os.path.join(FOLDER_PATH, "plots"))  # Ensure plots directory exists
+    # plot the validation loss and training loss every plot_intvl epochs
+    if (e % plot_intvl == 0) or e==len(train_loader)-1:
         if e==N_EPOCHS-1:
-            # Add the path to your LaTeX installation
-            os.environ["PATH"] += os.pathsep + "/usr/local/bin/pdflatex"  # Update this path to your LaTeX installation
-
             # some styling for nice plots
             fig_width_pt=347.5*1.6
             inches_per_pt = 1.0/72.27               # Convert pt to inches
@@ -170,34 +157,18 @@ for e in epochs:  # loop over epochs
             plt.rcParams.update(params)
 
         # plot the average loss of the last 10 epochs
-        avg_train_losses = [np.mean(all_train_losses[i:i+10]) for i in range(0,len(all_train_losses),10)]
-        avg_val_losses = [np.mean(all_val_losses[i:i+10]) for i in range(0,len(all_val_losses),10)]
-        es = np.arange(10, len(avg_train_losses)*10+1, 10)
+        es = np.arange(10, len(all_train_losses)*10+1, 10)
         plt.figure(figsize=(10, 5))
-        plt.plot(es,avg_train_losses, label='Training Loss')
-        plt.plot(es,avg_val_losses, label='Validation Loss')
+        plt.plot(es,all_train_losses, label='Training Loss')
         plt.xlabel('Epochs')
         plt.ylabel('Loss')
         plt.title('Training and Validation Loss')
         plt.legend()
-        plt.savefig(os.path.join(FOLDER_PATH, "plots", f"{g.name}_loss_plot.png"))
+        plt.savefig(os.path.join(PLOT_PATH, f"{model_name}_loss_plot.png"))
         plt.close()
 
-    
 
-fig, ax = plt.subplots(1, 1)
-sns.histplot(dataset, stat='density', label='Sampled distribution')
-#plt.hist(dataset.numpy(), bins=50, density=True, alpha=0.5, color='blue', label='True distribution')
-# plot the theoretical distribution
-bins = np.linspace(-10, 10, 1000)
-multi_gaussian = 1/np.sqrt(2 * np.pi) * (1/3*np.exp(-0.5 * (bins + 4)**2) + 2/3*np.exp(-0.5 * (bins - 4)**2))
-ax.plot(bins, multi_gaussian, color='red', label='True distribution', linewidth=2)
-plt.legend()
-# save the plot in the plots folder and create the folder if it does not exist
-if not os.path.exists(os.path.join(FOLDER_PATH, "plots")):
-    os.makedirs(os.path.join(FOLDER_PATH, "plots"))
-plt.savefig(os.path.join(FOLDER_PATH, "plots", "data_distribution.png"))
-plt.close()
+
 
 
 

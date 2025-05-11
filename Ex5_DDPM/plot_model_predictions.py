@@ -154,7 +154,7 @@ plt.close()
 fig, ax = plt.subplots(1, 1)
 for i in range(len(samples_evolution)):
     # check whether the sample ends up below 0 or above 0 and color accordingly
-    if samples_evolution[i][-1] < 0:
+    if samples_evolution[i][0] < 0:
         color = 'xkcd:dirty blue'
     else:
         color = 'xkcd:pale orange'

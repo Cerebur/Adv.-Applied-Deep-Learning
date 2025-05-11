@@ -6,6 +6,7 @@ runs/
 models/
 # Ignore all files inside a data directory
 data/
+dataset/
 # Ignore all files inside a solutions directory
 solutions/
 # Ignore all files inside a filecache directory

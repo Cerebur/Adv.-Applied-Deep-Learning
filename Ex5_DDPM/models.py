@@ -17,7 +17,7 @@ class NoisePredictor(torch.nn.Module):
         # Initialize the parameters
         super(NoisePredictor, self).__init__()
         self.input_dim = input_dim  # Add 1 to account for the time step
-        self.output_dim = output_dim
+        self.output_dim = output_dim 
         self.hidden_dim = hidden_dim
 
         # Define the layers of the network

@@ -5,8 +5,12 @@ import torch.nn as nn
 import torch.optim as optim
 import matplotlib.pyplot as plt
 import seaborn as sns  # a useful plotting library on top of matplotlib
-from models import NoisePredictor  # the neural network that predicts the noise added to the data
+from denoising_diffusion_pytorch import Unet, GaussianDiffusion
 import os
+from torch.utils.data import DataLoader
+import torchvision.datasets as datasets
+from torchvision import transforms
+import imageio
 
 
 FOLDER_PATH = os.path.dirname(os.path.abspath(__file__))
@@ -34,147 +38,129 @@ params = {  'text.usetex': True,
             'xtick.direction':'in',
             'ytick.labelsize': 20,
             'font.family' : 'lmodern',
-            'figure.figsize': fig_size}
+            'figure.figsize': fig_size} 
 plt.rcParams.update(params)
 
-
-# generate a dataset of 1D data from a mixture of two Gaussians
-# this is a simple example, but you can use any distribution
-data_distribution = torch.distributions.mixture_same_family.MixtureSameFamily(
-    torch.distributions.Categorical(torch.tensor([1, 2])),
-    torch.distributions.Normal(torch.tensor([-4., 4.]), torch.tensor([1., 1.]))
-)
-dataset = data_distribution.sample(torch.Size([10000]))  # create training data set
-dataset_validation = data_distribution.sample(torch.Size([1000])) # create validation data set
-
-
-# we will keep these parameters fixed throughout
-# these parameters should give you an acceptable result
-# but feel free to play with them
-TIME_STEPS = 250
+# Hyperparameters
+LEARNING_RATE = 4e-4
+BATCH_SIZE = 128  # Batch size
+N_EPOCHS = 100
+IMAGE_SIZE = 28
+TIME_STEPS = 1000
+SAMPLING_TIMESTEPS = 250
 BETA = 0.02
-N_EPOCHS = 1000
-BATCH_SIZE = 64
-LEARNING_RATE = 0.8e-4
-
-# Initialize model
-model = NoisePredictor(input_dim=2, output_dim=1, hidden_dim=64, num_layers=5)  # the neural network that predicts the noise added to the data
 
 
-model_name='variable_beta'  # name of the model
+# we define a tranform that converts the image to tensor
+myTransforms = transforms.Compose([transforms.ToTensor()])
+
+# Select the gpu device if available
+if torch.cuda.is_available():
+    device = torch.device("cuda")       #CUDA GPU
+elif torch.backends.mps.is_available():
+    device = torch.device("mps")        #Apple GPU
+else:
+    device = torch.device("cpu")        #if nothing is found use the CPU
+print(f"Using device: {device}")
+
+model_name = 'model1'  # Name of the model
+DIM = 32
+DIM_MULTS = (1, 2, 5)
+model = Unet(
+    dim = DIM,
+    dim_mults = DIM_MULTS,
+    flash_attn = False,
+    channels = 1
+)
+
+
 # Load the best model saved in models directory
-if os.path.exists(FOLDER_PATH+f'/models/{model_name}_best.pth'):
-    best_model = torch.load(FOLDER_PATH+f'/models/{model_name}_best.pth')
+if os.path.exists(FOLDER_PATH+f'/models/{model_name}_cpu_best.pth'):
+    best_model = torch.load(FOLDER_PATH+f'/models/{model_name}_cpu_best.pth')
     print("Best model loaded from file.")
 else:
     raise FileNotFoundError(f"Best model file not found in {FOLDER_PATH}/models/")
 
 
-
 # Final evaluation on the test dataset
+# model = torch.load(FOLDER_PATH+f'/models/{model_name}_best.pth', map_location=device)
 model.load_state_dict(best_model)
-model.eval()
-device = 'mps'
-model.to(device)
+# model.eval()
 
-beta_schedule = torch.linspace(BETA,0.001, TIME_STEPS).to(device)  # Linearly decreasing beta values
-if model_name == 'fixed_beta':
-    beta_schedule = beta_schedule * 0 + BETA
-alpha = 1 - beta_schedule
-alpha_bar = torch.cumprod(alpha, dim=0)  # Cumulative product of (1 - beta_t)
+diffusion = GaussianDiffusion(
+    model,
+    image_size = IMAGE_SIZE,
+    timesteps = TIME_STEPS,           # number of steps
+    sampling_timesteps = SAMPLING_TIMESTEPS    # number of sampling timesteps (using ddim for faster inference [see ddim paper])
+).to(device)  # move the model to the device
 
-def sample_reverse(g, count, samples_evolution_num=10, hist_sample_times=10):
-    """
-    Sample from the model by applying the reverse diffusion process
 
-    Here, implement algorithm 2 of the DDPM paper (https://arxiv.org/abs/2006.11239)
+# the MNIST dataset is available through torchvision.datasets
+print("loading MNIST digits dataset")
+test_dataset = datasets.MNIST(root='dataset/', train=False, download=False, transform=myTransforms)
+for i in test_dataset:
+    # check if the data is normalized between 0 and 1
+    assert i[0].min() >= 0 and i[0].max() <= 1, "Data is not normalized between 0 and 1"
+test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
 
-    Parameters
-    ----------
-    g : torch.nn.Module
-        The neural network that predicts the noise added to the data
-    count : int
-        The number of samples to generate in parallel
 
-    Returns
-    -------
-    x : torch.Tensor
-        The final sample from the model
-    """
-    
-    # sample a random noise from the standard normal distribution
-    x = torch.randn(count, 1).to(device)  # shape (count, 1)
-    # randomly select 10 indices from x array to plot their evolution
-    indices = torch.randint(0, count, (samples_evolution_num,))
-    # save the evolution of the samples
-    x_evolution = torch.zeros((samples_evolution_num, TIME_STEPS)).to(device)
-    x_evolution[:, 0] = x[indices].squeeze(1)  # save the initial samples
-    hist_tot=[]
-    bins_tot = []
-    # loop over time steps
+# test the final loss on the test dataset
+def test_loss(model, diffusion, test_loader, device):
+    model.eval()
+    total_loss = 0
     with torch.no_grad():
-        for t in range(TIME_STEPS-1,-1,-1):
-            # compute sqrt_alpha_bar_t and sqrt(1 - alpha_bar_t) for each t
-            sqrt_one_minus_alpha_bar_t = torch.sqrt(1 - alpha_bar[t]).to(device)
-            # sample a random noise from the standard normal distribution
-            z = torch.randn(count, 1).to(device) if t > 0 else torch.zeros_like(x).to(device)  # shape (count, 1)
-            # compute the new sample
-            x = 1 / torch.sqrt(alpha[t]) * (x - (1 - alpha[t]) / sqrt_one_minus_alpha_bar_t * g(x, torch.full((count,),t+1).to(device))) + z * torch.sqrt(beta_schedule[t])
-            # save the evolution of the samples
-            x_evolution[:, t] = x[indices].squeeze(1)  # save the current samples
+        for batch in test_loader:
+            x, _ = batch
+            x = x.to(device)
+            loss = diffusion(x)
+            total_loss += loss.item()
+    return total_loss / len(test_loader)
+test_loss_value = test_loss(model, diffusion, test_loader, device)
+print(f"Test loss: {test_loss_value:.4f}")
 
-            # calc hist of the samples every hist_sample_times steps
-            if t % hist_sample_times == 0:
-                # calculate the histogram of the samples
-                hist, binedges = np.histogram(x.detach().cpu().numpy(), bins=50, range=(-10, 10), density=True)
-                hist = hist / hist.sum()
-                hist_tot.append(hist)
-                bins= binedges[:-1] + np.diff(binedges) / 2
-                bins_tot.append(bins)
-
-
-    return x, x_evolution, hist_tot, bins_tot
-sample_times=25
-samples, samples_evolution, hist_tot, bins_tot = sample_reverse(model, 1000, samples_evolution_num=100, hist_sample_times=sample_times)
-samples = samples.detach().cpu().numpy()
-
-# plot the samples
-fig, ax = plt.subplots(1, 1)
-bins = np.linspace(-10, 10, 100)
-sns.kdeplot(dataset, ax=ax, color='xkcd:red', label='True distribution', linewidth=2)
-sns.histplot(samples, ax=ax, bins=bins, color='red', label='Sampled distribution', stat='density')
-ax.legend()
-ax.set_xlabel('Sample value')
-ax.set_ylabel('Sample count')
-fig.tight_layout()
-plt.savefig(os.path.join(FOLDER_PATH, "plots", f"{model_name}_sampled_distribution.png"))
-plt.close()
-
-# plot the evolution of the samples
-fig, ax = plt.subplots(1, 1)
-for i in range(len(samples_evolution)):
-    # check whether the sample ends up below 0 or above 0 and color accordingly
-    if samples_evolution[i][-1] < 0:
-        color = 'xkcd:dirty blue'
+def tile_images(images, grid_shape=None):
+    """
+    Tile a batch of images into a single image grid.
+    images: numpy array of shape (N, H, W)
+    grid_shape: tuple (rows, cols), optional. If None, will use square grid.
+    Returns: tiled image of shape (rows*H, cols*W)
+    """
+    N, H, W = images.shape
+    if grid_shape is None:
+        rows = cols = int(np.ceil(np.sqrt(N)))
     else:
-        color = 'xkcd:pale orange'
-    ax.plot(torch.arange(TIME_STEPS, 0, -1),samples_evolution[i].detach().cpu().numpy(), label=f'Sample {i+1}', color=color, alpha=0.5)
-ax.set_xlabel('Time step')
-ax.set_ylabel('Sample value')
-fig.tight_layout()
-plt.savefig(os.path.join(FOLDER_PATH, "plots", f"{model_name}_sample_evolution.png"))
-plt.close()
+        rows, cols = grid_shape
+    # Pad images if needed
+    pad = rows * cols - N
+    if pad > 0:
+        images = np.pad(images, ((0, pad), (0, 0), (0, 0)), mode='constant')
+    images = images.reshape(rows, cols, H, W)
+    images = images.transpose(0, 2, 1, 3)
+    tiled = images.reshape(rows * H, cols * W)
+    return tiled
 
-# plot the histograms of the samples as one multi plot
-fig, ax = plt.subplots(250//sample_times//5, 5, figsize=(20, 8))
-for i in range(len(hist_tot)):
-    a = i // 5
-    b = i % 5
+def create_gif(model, diffusion, device, num_samples=9, num_timesteps=250, save_path='diffusion_process.gif'):
+    """
+    Create a gif of the reverse diffusion process for a batch of images, tiled as a grid.
+    """
+    batch_size = num_samples
+    images = torch.randn(batch_size, 1, IMAGE_SIZE, IMAGE_SIZE).to(device)  # Start from pure noise
 
-    ax[a, b].bar(bins_tot[i], hist_tot[i], facecolor='xkcd:greyblue', edgecolor='black', label=f'Time step {i*sample_times}', width=20/len(bins_tot[i]), alpha=0.7)
-    ax[a, b].set_title(f'Time step {(i+1)*sample_times}')
-    ax[a, b].set_xlabel('Sample value')
-    ax[a, b].set_ylabel('Sample count')
-fig.tight_layout()
-plt.savefig(os.path.join(FOLDER_PATH, "plots", f"{model_name}_sample_histograms.png"))
-plt.close()
+    frames = []
+
+    for t in tqdm(reversed(range(num_timesteps))):
+        with torch.no_grad():
+            pred_x0, _ = diffusion.p_sample(images, t)
+        if t%10==0 or t<=20:
+            img = pred_x0.cpu().numpy().transpose(0, 2, 3, 1)  # (N, H, W, 1)
+            img = (img * 255).astype(np.uint8)
+            img = img.squeeze(-1)  # (N, H, W)
+            tiled_img = tile_images(img)
+            frames.append(tiled_img)
+        images = pred_x0
+
+    imageio.mimsave(save_path, frames, fps=10)
+    print(f"Gif saved at {save_path}")
+
+# Create the gif
+create_gif(model, diffusion, device, num_samples=25, num_timesteps=TIME_STEPS, save_path=os.path.join(FOLDER_PATH,'plots','diffusion_process.gif'))
