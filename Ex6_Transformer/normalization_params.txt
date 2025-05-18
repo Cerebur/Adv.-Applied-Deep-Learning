@@ -13,3 +13,9 @@ time_ranges_val: (np.float64(1.6914941443416414), np.float64(27.497547256767053)
 x_ranges_test: (np.float64(-2.5), np.float64(2.5))
 y_ranges_test: (np.float64(-2.5), np.float64(2.5))
 time_ranges_test: (np.float64(1.7239628787293453), np.float64(27.459494292360173))
+x_label_ranges_train: [-9.97452492  9.92013491]
+y_label_ranges_train: [-9.97440371  9.99271731]
+x_label_ranges_val: [-9.95850719  9.99804892]
+y_label_ranges_val: [-9.96252391  9.97625426]
+x_label_ranges_test: [-9.98277063  9.97667537]
+y_label_ranges_test: [-9.9671583   9.96561706]

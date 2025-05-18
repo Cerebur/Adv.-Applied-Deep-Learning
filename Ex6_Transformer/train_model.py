@@ -18,7 +18,7 @@ if not os.path.exists(MODEL_PATH):
 # Hyperparameters
 N_epochs = 100
 BATCH_SIZE = 128  # Batch size
-LEARNING_RATE = 4e-4
+LEARNING_RATE = 0.001
 d_model = 64
 nhead = 2
 dim_feedforward = 256
@@ -43,9 +43,10 @@ model = TransformerEncoder(
 # define the loss function
 criterion = nn.MSELoss()
 # define the optimizer
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-# define the learning rate scheduler
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+# define the learning rate scheduler to reduce on plateau
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=5)
+# scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1,)
 # define the device
 device = 'mps'
 
@@ -57,6 +58,7 @@ best_val_loss = float('inf')
 all_train_losses = []
 all_val_losses = []
 plot_intvl = 1
+last_lr = LEARNING_RATE
 for epoch in epochs:
     model.train()
     train_loss = 0.0
@@ -93,7 +95,12 @@ for epoch in epochs:
     print(f"Epoch {epoch + 1}/{N_epochs}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
 
     # update the learning rate
-    scheduler.step()
+    scheduler.step(val_loss)
+    # print the learning rate if the scheduler decreases it
+    if scheduler.get_last_lr()[0] < last_lr:
+        last_lr = scheduler.get_last_lr()[0]
+        print(f"Learning rate decreased to {last_lr:.4e}")
+
     # save the model if the validation loss is lower than the previous best
     if epoch == 0 or val_loss < best_val_loss:
         best_val_loss = val_loss
@@ -128,9 +135,11 @@ for epoch in epochs:
             plt.rcParams.update(params)
 
         plt.figure(figsize=(10, 5))
-        plt.plot(np.arange(0,epoch+1,1),all_train_losses, label='Training Loss')
-        plt.plot(np.arange(0,epoch+1,1),all_val_losses, label='Validation Loss')
+        plt.plot(np.arange(1,epoch+2,1),all_train_losses, label='Training Loss')
+        plt.plot(np.arange(1,epoch+2,1),all_val_losses, label='Validation Loss')
         plt.xlabel('Epochs')
+        plt.xticks(np.arange(1, epoch + 2, epoch // 10))
+        plt.xlim(0, epoch)
         plt.ylabel('Loss')
         plt.title('Training and Validation Loss')
         plt.legend()

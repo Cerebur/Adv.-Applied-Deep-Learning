@@ -62,10 +62,13 @@ label_ranges = {}
 with open(norm_param_file, "r") as f:
     for line in f:
         key, value = line.strip().split(":")
-        # Since the values are in the form of (np.float64(-2.5), np.float64(2.5)), we need to convert them to float and tuple
-        value = value.split(",")
-        value = [value.strip().strip('np.float64').strip('(np.float64').strip('(').strip(')') for value in value]
-        label_ranges[key] = (float(value[0]), float(value[1]))
+        if 'label_ranges' in key:
+            value = value.strip().strip('[').strip(']').split("  ")
+            label_ranges[key] = (float(value[0]), float(value[1]))
+        elif 'pos_mean_std_test' in key:
+            values = value.strip().strip('(').strip(')').split(',')
+            values = [v.strip().split('np.float64(')[1].strip(')').strip() for v in values]
+            label_ranges[key] = (float(values[0]), float(values[1]))
 
 # initialize the model
 model = TransformerEncoder(
@@ -95,27 +98,42 @@ model.load_state_dict(best_model)
 model.eval()
 
 all_predictions, all_true_labels, _, _ = evaluate_model(model, test_dataloader, criterion, device)
-all_predictions = denormalize(all_predictions[:,:n_labels], np.array([label_ranges['x_ranges_test'], label_ranges['y_ranges_test']]).T)
-all_true_labels = denormalize(all_true_labels,  np.array([label_ranges['x_ranges_test'], label_ranges['y_ranges_test']]).T)
+all_predictions = all_predictions*np.array([label_ranges['x_pos_mean_std_test'][1], label_ranges['y_pos_mean_std_test'][1]]).reshape(1,2)+np.array([label_ranges['x_pos_mean_std_test'][0], label_ranges['y_pos_mean_std_test'][0]]).reshape(1,2)
+#denormalize(all_predictions[:,:n_labels], np.array([label_ranges['x_label_ranges_test'], label_ranges['y_label_ranges_test']]).T)
+all_true_labels = all_true_labels*np.array([label_ranges['x_pos_mean_std_test'][1], label_ranges['y_pos_mean_std_test'][1]]).reshape(1,2)+np.array([label_ranges['x_pos_mean_std_test'][0], label_ranges['y_pos_mean_std_test'][0]]).reshape(1,2)
+
+#denormalize(all_true_labels,  np.array([label_ranges['x_label_ranges_test'], label_ranges['y_label_ranges_test']]).T)
 
 gt = all_true_labels # for readability
 
-# Scatter plots for predictions
-fig, axes = plt.subplots(1, 2, figsize=(16, 10))  # First row taller
+# Scatter plots for predictions with error plots below
 labelNames = ['xpos', 'ypos']
+fig, axes = plt.subplots(2, n_labels, figsize=(16, 8), gridspec_kw={'height_ratios': [2, 1]})
+
 for j in range(n_labels):
-    # Scatter plot
-    ax = axes[j]
-    # Scatter plot of true vs predicted values with error bars
-    ax.scatter(gt[:, j], all_predictions[:, j],marker='o', alpha=0.2)
-    ax.plot([gt[:, j].min().item(), gt[:, j].max().item()], [gt[:, j].min().item(), gt[:, j].max().item()],
-            c="black", linestyle="dashed", label="Perfect prediction")
-    ax.set_xlabel("true " + labelNames[j])
-    ax.set_ylabel("predicted " + labelNames[j])
-    ax.legend()
+    # Scatter plot: true vs predicted
+    ax_scatter = axes[0, j]
+    ax_scatter.scatter(gt[:, j], all_predictions[:, j],s=6, alpha=0.2)
+    ax_scatter.plot(
+        [gt[:, j].min().item(), gt[:, j].max().item()],
+        [gt[:, j].min().item(), gt[:, j].max().item()],
+        c="black", linestyle="dashed", label="Perfect prediction"
+    )
+    ax_scatter.set_xlabel("true " + labelNames[j])
+    ax_scatter.set_ylabel("predicted " + labelNames[j])
+    ax_scatter.legend()
+
+    # Error plot: error vs true
+    ax_error = axes[1, j]
+    errors = all_predictions[:, j] - gt[:, j]
+    ax_error.scatter(gt[:, j], errors, s=6, alpha=0.2, c="xkcd:red")
+    ax_error.axhline(0, color="black", linestyle="dashed", label="Zero error")
+    ax_error.set_xlabel("true " + labelNames[j])
+    ax_error.set_ylabel("error (predicted - true)")
+    ax_error.legend()
 
 plt.tight_layout()
-plt.savefig(FOLDER_PATH+f'/plots/{model.name}_scatter.png')
+plt.savefig(FOLDER_PATH+f'/plots/{model.name}_scatter_and_error.png')
 plt.close()
 
 
@@ -126,7 +144,7 @@ for j in range(n_labels):
     # Calculate the error
     error = all_predictions[:, j] - gt[:, j]
     # Plot the error
-    ax.hist(error, bins=50, density=True, alpha=0.7, color='xkcd:gray', label="Error distribution")
+    ax.hist(error, bins=100, density=True, alpha=0.7, color='xkcd:gray', label="Error distribution")
     ax.set_xlabel("Error")
     ax.set_ylabel("Density")
     ax.set_title(f"Error distribution for {labelNames[j]}")
@@ -136,7 +154,7 @@ for j in range(n_labels):
     mu, std = np.mean(error), np.std(error)
     xmin, xmax = ax.get_xlim()
     x = np.linspace(xmin, xmax, 100)
-    p = np.exp(-0.5 * ((x - mu) / std) ** 2) / (std * np.sqrt(2 * np.pi))
+    p = np.exp(-0.5 * ((x - mu)/std) ** 2) / (std * np.sqrt(2 * np.pi))
     ax.plot(x, p, 'xkcd:red', linewidth=2, label='Gaussian fit\n'+fr'$\mu={mu:.2f}$,'+'\n'+fr'$\sigma={std:.2f}$')
     # Add a legend
     ax.legend(loc='upper left')

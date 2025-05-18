@@ -144,6 +144,8 @@ def get_normalized_data(DATA_PATH):
     val_dataset = awkward.from_parquet(os.path.join(DATA_PATH, "val.pq"))
     test_dataset = awkward.from_parquet(os.path.join(DATA_PATH, "test.pq"))
 
+    print (len(train_dataset), len(val_dataset), len(test_dataset))
+
     #print the minimum and maximum values of the training dataset labels xpos and ypos
     print(f"Minimum and maximum values of the test dataset labels xpos: {np.min(test_dataset['xpos'])}, {np.max(test_dataset['xpos'])}")
     print(f"Minimum and maximum values of the test dataset labels ypos: {np.min(test_dataset['ypos'])}, {np.max(test_dataset['ypos'])}")
@@ -157,8 +159,10 @@ def get_normalized_data(DATA_PATH):
                                                     # with [:,0,:] we would get a 2D array of shape (n_events, n_hits)
         norm_times, ranges_times = normalize(times, 0.01) # Normalize the time data using the 1st and 99th percentiles
         x = dataset["data"][:, 1:2, :]
+        #ranges_x = np.array([np.min(x), np.max(x)])
         norm_x, ranges_x = normalize(x, 0.01) # Normalize the x data using the 1st and 99th percentiles
         y = dataset["data"][:, 2:3, :]
+        #ranges_y = np.array([np.min(y), np.max(y)])
         norm_y, ranges_y = normalize(y, 0.01) # Normalize the y data using the 1st and 99th percentiles
 
         # Concatenate the normalized data back together
@@ -168,6 +172,10 @@ def get_normalized_data(DATA_PATH):
             "xpos": (np.mean(dataset["xpos"]), np.std(dataset["xpos"])),
             "ypos": (np.mean(dataset["ypos"]), np.std(dataset["ypos"]))
         }
+
+        ranges_label_x = np.array([np.min(dataset["xpos"]), np.max(dataset["xpos"])])
+        ranges_label_y = np.array([np.min(dataset["ypos"]), np.max(dataset["ypos"])])
+
         # Normalize labels (this can be done in-place), e.g. by
         dataset["xpos"] = (dataset["xpos"] - np.mean(dataset["xpos"])) / np.std(dataset["xpos"])
         dataset["ypos"] = (dataset["ypos"] - np.mean(dataset["ypos"])) / np.std(dataset["ypos"]) 
@@ -176,7 +184,9 @@ def get_normalized_data(DATA_PATH):
         norm_ranges_dict={
             "time": ranges_times,
             "x": ranges_x,
-            "y": ranges_y
+            "y": ranges_y,
+            "x_label": ranges_label_x,
+            "y_label": ranges_label_y
         }
 
         return dataset, mean_std_dict, norm_ranges_dict
@@ -203,7 +213,7 @@ def get_normalized_data(DATA_PATH):
     return train_dataset, val_dataset, test_dataset, n_labels, mean_std_dict, norm_ranges_dict
 
 
-def get_dataloader(batch_size=32, pin_memory=True):
+def get_dataloader(batch_size=32):
     """
     Get the dataloaders for training, validation, and test datasets.
 
@@ -249,7 +259,13 @@ def get_dataloader(batch_size=32, pin_memory=True):
         "time_ranges_val": norm_ranges_dict["val"]["time"],
         "x_ranges_test": norm_ranges_dict["test"]["x"],
         "y_ranges_test": norm_ranges_dict["test"]["y"],
-        "time_ranges_test": norm_ranges_dict["test"]["time"]
+        "time_ranges_test": norm_ranges_dict["test"]["time"],
+        "x_label_ranges_train": norm_ranges_dict["train"]["x_label"],
+        "y_label_ranges_train": norm_ranges_dict["train"]["y_label"],
+        "x_label_ranges_val": norm_ranges_dict["val"]["x_label"],
+        "y_label_ranges_val": norm_ranges_dict["val"]["y_label"],
+        "x_label_ranges_test": norm_ranges_dict["test"]["x_label"],
+        "y_label_ranges_test": norm_ranges_dict["test"]["y_label"]
     }
 
     normalization_params_path = os.path.join(FOLDER_PATH, "normalization_params.txt")
